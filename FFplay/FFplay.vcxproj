@@ -12,8 +12,8 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{18CB8F7C-FCA7-482D-B962-050C249DB3B6}</ProjectGuid>
-    <RootNamespace>FFPlay</RootNamespace>
-    <ProjectName>FFPlay</ProjectName>
+    <RootNamespace>FFplay</RootNamespace>
+    <ProjectName>FFplay</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -81,10 +81,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FFPlay.cpp" />
+    <ClCompile Include="FFplay.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FFPlay.h" />
+    <ClInclude Include="FFplay.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

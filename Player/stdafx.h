@@ -26,4 +26,6 @@
 
 #include "..\..\DuiLib\UIlib.h"
 
+#define LOAD_FFPLAY_DLL
+
 #endif

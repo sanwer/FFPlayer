@@ -1,32 +1,16 @@
 #include "stdafx.h"
 #include "Player.h"
+#include "FFplay.h"
 
-typedef int (*LPMediaOpen)(const char *filename);
-typedef int (*LPMediaPlay)(HWND hWnd,RECT rcPos);
-typedef int (*LPMediaClose)();
-
-LPMediaOpen pMediaOpen = NULL;
-LPMediaPlay pMediaPlay = NULL;
-LPMediaClose pMediaClose = NULL;
+HMODULE gModule = NULL;
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 {
 	switch (dwReason)
 	{
-	case DLL_PROCESS_ATTACH: {
-		HMODULE hFFPlay = NULL;
-#ifdef _DEBUG
-		hFFPlay = ::LoadLibrary(_T("FFPlay_d.dll"));
-#else
-		hFFPlay = ::LoadLibrary(_T("FFPlay.dll"));
-#endif
-		if( hFFPlay != NULL ) {
-			pMediaOpen = (LPMediaOpen)::GetProcAddress(hFFPlay, "media_open");
-			pMediaPlay = (LPMediaPlay)::GetProcAddress(hFFPlay, "media_play");
-			pMediaClose = (LPMediaClose)::GetProcAddress(hFFPlay, "media_close");
-		}
+	case DLL_PROCESS_ATTACH:
+		gModule = hModule;
 		break;
-							 }
 	case DLL_THREAD_ATTACH:
 		break;
 	case DLL_THREAD_DETACH:
@@ -39,11 +23,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 
 extern "C" PLAYER_API DuiLib::CControlUI* CreateControl(LPCTSTR pstrClass)
 {
-	if (_tcsicmp(pstrClass, _T("Player")) == 0)
+	if (_tcsicmp(pstrClass, _T("Player")) == 0 && gModule!=NULL)
 	{
 		return new DuiLib::CPlayerUI();
 	}
 	return	NULL;
+}
+
+void PlayerCallback(const char * filename)
+{
 }
 
 namespace DuiLib
@@ -114,10 +102,7 @@ namespace DuiLib
 
 	void CPlayerWnd::OnFinalMessage(HWND hWnd)
 	{
-		if(pMediaClose){
-			pMediaClose();
-		}
-
+		FFplayExit();
 		m_pOwner->Invalidate();
 		m_pOwner->m_pWindow = NULL;
 
@@ -126,26 +111,24 @@ namespace DuiLib
 
 	bool CPlayerWnd::Open(LPCSTR filepath)
 	{
-		if(pMediaOpen){
-			pMediaOpen(filepath);
-		}
+		if(gModule)
+			FFplayInit(gModule,m_hWnd,CalPos());
+		else
+			return false;
+		FFplayOpen(filepath);
 		return true;
 	}
 
 	bool CPlayerWnd::Play()
 	{
-		if(pMediaPlay){
-			pMediaPlay(m_hWnd,CalPos());
-		}
+		FFplayPlay();
 		return true;
 	}
 
 	bool CPlayerWnd::Stop()
 	{
+		FFplayExit();
 		::SendMessage(m_hWnd, WM_CLOSE, 0, 0);
-		if(pMediaClose){
-			pMediaClose();
-		}
 		return true;
 	}
 

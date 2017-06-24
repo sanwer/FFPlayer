@@ -15,7 +15,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Player", "Player\Player.vcx
 		{E106ACD7-4E53-4AEE-942B-D0DD426DB34E} = {E106ACD7-4E53-4AEE-942B-D0DD426DB34E}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FFPlay", "FFPlay\FFPlay.vcxproj", "{18CB8F7C-FCA7-482D-B962-050C249DB3B6}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FFplay", "FFplay\FFplay.vcxproj", "{18CB8F7C-FCA7-482D-B962-050C249DB3B6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

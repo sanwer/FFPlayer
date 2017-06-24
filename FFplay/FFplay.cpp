@@ -33,7 +33,7 @@ extern "C" {
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_thread.h"
 
-#include "FFPlay.h"
+#include "FFplay.h"
 #pragma comment( lib, "User32.lib" )
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
@@ -303,7 +303,7 @@ static int genpts = 0;
 static int lowres = 0;
 static int decoder_reorder_pts = -1;
 static int autoexit;
-static int loop = -1;
+static int loop = 1;
 static int framedrop = -1;
 static int infinite_buffer = -1;
 static int show_mode = SHOW_MODE_NONE;
@@ -324,6 +324,7 @@ static HWND hFromWnd=NULL;
 #define lrint(f) (f>=0?(int32_t)(f+(double)0.5):(int32_t)(f-(double)0.4))
 
 AVDictionary *format_opts, *codec_opts;
+VideoState *is;
 
 AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
                                 AVFormatContext *s, AVStream *st, AVCodec *codec)
@@ -361,8 +362,8 @@ AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
         if (p)
             switch (avformat_match_stream_specifier(s, st, p + 1)) {
             case  1: *p = 0; break;
-            case  0:         continue;
-            default:         media_close();
+            case  0: continue;
+            default: ffplay_exit();
             }
 
         if (av_opt_find(&cc, t->key, NULL, flags, AV_OPT_SEARCH_FAKE_OBJ) ||
@@ -2463,7 +2464,7 @@ static int read_thread(void *arg)
     if (infinite_buffer < 0 && is->realtime)
         infinite_buffer = 1;
 
-    for (;;) {
+    for (;is->eof != 1;) {
         if (is->abort_request)
             break;
         if (is->paused != is->last_paused) {
@@ -2601,12 +2602,6 @@ static int read_thread(void *arg)
 
 static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
 {
-    VideoState *is;
-
-    is = (VideoState *)av_mallocz(sizeof(VideoState));
-    if (!is)
-        return NULL;
-
     //is->hFromWnd = hWnd;
     is->filename = av_strdup(filename);
     if (!is->filename)
@@ -2834,9 +2829,7 @@ static int lockmgr(void **mtx, enum AVLockOp op)
    return 1;
 }
 
-VideoState *is;
-
-extern "C" FFPLAY_API int media_open(const char *filename)
+extern "C" FFPLAY_API int ffplay_init(HWND hWnd,RECT rcPos)
 {
     av_log_set_flags(AV_LOG_SKIP_REPEATED);
 
@@ -2844,9 +2837,12 @@ extern "C" FFPLAY_API int media_open(const char *filename)
     av_register_all();
     avformat_network_init();
 
-    if (!filename) {
-        av_log(NULL, AV_LOG_FATAL, "An filename must be specified\n");
-        return 1;
+    is = (VideoState *)av_mallocz(sizeof(VideoState));
+    if (!is) {
+		if(hWnd != NULL)
+			SendMessage(is->hFromWnd,WM_CLOSE,0,0);
+		avformat_network_deinit();
+		return 0;
     }
 
     if (av_lockmgr_register(lockmgr)) {
@@ -2857,40 +2853,45 @@ extern "C" FFPLAY_API int media_open(const char *filename)
     av_init_packet(&flush_pkt);
     flush_pkt.data = (uint8_t *)&flush_pkt;
 
-    is = stream_open(filename, file_iformat);
-    if (!is) {
-        return do_exit(NULL);
-    }
-
-    return 0;
-}
-
-extern "C" FFPLAY_API int media_play(HWND hWnd,RECT rcPos)
-{
-    if (!is) {
-        return do_exit(NULL);
-    }
-    is->hFromWnd = hWnd;
+	is->hFromWnd = hWnd;
 	screen_width  = is->width   = rcPos.right - rcPos.left;
 	screen_height  = is->height  = rcPos.bottom - rcPos.top;
 
-    if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
-        av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
-        return 1;
-    }
+	if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
+		av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
+		return 1;
+	}
 
-    SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
-    SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
-
-    event_loop(is);
+	SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
+	SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
 
     return 0;
 }
 
-extern "C" FFPLAY_API int media_close()
+extern "C" FFPLAY_API int ffplay_open(const char *filename)
+{
+    if (!filename) {
+        av_log(NULL, AV_LOG_FATAL, "An filename must be specified\n");
+        return 1;
+    }
+
+    stream_open(filename, file_iformat);
+
+    return 0;
+}
+
+extern "C" FFPLAY_API int ffplay_play()
+{
+    if (is) {
+		event_loop(is);
+    }
+
+    return 0;
+}
+
+extern "C" FFPLAY_API int ffplay_exit()
 {
 	SDL_Event event;
-	event.type = FF_QUIT_EVENT;
-	event.user.data1 = is;
+	event.type = SDL_QUIT;
 	return SDL_PushEvent(&event);
 }
