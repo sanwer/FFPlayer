@@ -29,8 +29,10 @@ namespace DuiLib
 		void SetInternVisible(bool bVisible);
 
 		bool Open(LPCSTR filepath);
-		bool Play();
-		bool Stop();
+		void Play();
+		void Pause();
+		void Stop();
+		void Exit();
 
 	protected:
 		CPlayerWnd* m_pWindow;

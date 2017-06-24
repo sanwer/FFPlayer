@@ -31,21 +31,21 @@ int FFplayInit(HMODULE hModule,HWND hWnd,RECT rcPos)
 #ifdef LOAD_FFPLAY_DLL
 
 #ifdef _DEBUG
-		hFFplay = ::LoadLibrary(_T("FFplay_d.dll"));
+	hFFplay = ::LoadLibrary(_T("FFplay_d.dll"));
 #else
-		hFFplay = ::LoadLibrary(_T("FFplay.dll"));
+	hFFplay = ::LoadLibrary(_T("FFplay.dll"));
 #endif
-		if( hFFplay != NULL ) {
-			pFFplayInit = (LPFFplayInit)::GetProcAddress(hFFplay, "ffplay_init");
-			pFFplayOpen = (LPFFplayOpen)::GetProcAddress(hFFplay, "ffplay_open");
-			pFFplayPlay = (LPFFplayPlay)::GetProcAddress(hFFplay, "ffplay_play");
-			pFFplayPause = (LPFFplayPause)::GetProcAddress(hFFplay, "ffplay_pause");
-			pFFplayStop = (LPFFplayStop)::GetProcAddress(hFFplay, "ffplay_stop");
-			pFFplayExit = (LPFFplayExit)::GetProcAddress(hFFplay, "ffplay_exit");
-		}
-		if(pFFplayInit){
-			nRet = pFFplayInit(hWnd,rcPos);
-		}
+	if( hFFplay != NULL ) {
+		pFFplayInit = (LPFFplayInit)::GetProcAddress(hFFplay, "ffplay_init");
+		pFFplayOpen = (LPFFplayOpen)::GetProcAddress(hFFplay, "ffplay_open");
+		pFFplayPlay = (LPFFplayPlay)::GetProcAddress(hFFplay, "ffplay_play");
+		pFFplayPause = (LPFFplayPause)::GetProcAddress(hFFplay, "ffplay_pause");
+		pFFplayStop = (LPFFplayStop)::GetProcAddress(hFFplay, "ffplay_stop");
+		pFFplayExit = (LPFFplayExit)::GetProcAddress(hFFplay, "ffplay_exit");
+	}
+	if(pFFplayInit){
+		nRet = pFFplayInit(hWnd,rcPos);
+	}
 #else
 	nRet = ffplay_init(hWnd,rcPos);
 #endif
@@ -56,9 +56,9 @@ int FFplayOpen(const char *filename)
 {
 	int nRet = 0;
 #ifdef LOAD_FFPLAY_DLL
-		if(pFFplayOpen){
-			nRet = pFFplayOpen(filename);
-		}
+	if(pFFplayOpen){
+		nRet = pFFplayOpen(filename);
+	}
 #else
 	nRet = ffplay_open(filename);
 #endif
@@ -69,9 +69,9 @@ int FFplayPlay()
 {
 	int nRet = 0;
 #ifdef LOAD_FFPLAY_DLL
-		if(pFFplayPlay){
-			nRet = pFFplayPlay();
-		}
+	if(pFFplayPlay){
+		nRet = pFFplayPlay();
+	}
 #else
 	nRet = ffplay_play();
 #endif
@@ -82,9 +82,9 @@ int FFplayPause()
 {
 	int nRet = 0;
 #ifdef LOAD_FFPLAY_DLL
-		if(pFFplayPause){
-			nRet = pFFplayPause();
-		}
+	if(pFFplayPause){
+		nRet = pFFplayPause();
+	}
 #else
 	nRet = ffplay_pause();
 #endif
@@ -95,9 +95,9 @@ int FFplayStop()
 {
 	int nRet = 0;
 #ifdef LOAD_FFPLAY_DLL
-		if(pFFplayStop){
-			nRet = pFFplayStop();
-		}
+	if(pFFplayStop){
+		nRet = pFFplayStop();
+	}
 #else
 	nRet = ffplay_stop();
 #endif
@@ -108,9 +108,9 @@ int FFplayExit()
 {
 	int nRet = 0;
 #ifdef LOAD_FFPLAY_DLL
-		if(pFFplayExit){
-			nRet = pFFplayExit();
-		}
+	if(pFFplayExit){
+		nRet = pFFplayExit();
+	}
 #else
 	nRet = ffplay_exit();
 #endif

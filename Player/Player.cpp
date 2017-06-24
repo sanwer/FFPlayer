@@ -47,11 +47,14 @@ namespace DuiLib
 		RECT CalPos();
 
 		LPCTSTR GetWindowClassName() const;
+		LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
 		void OnFinalMessage(HWND hWnd);
 
 		bool Open(LPCSTR filepath);
-		bool Play();
-		bool Stop();
+		void Play();
+		void Pause();
+		void Stop();
+		void Exit();
 
 	protected:
 		CPaintManagerUI m_Manager;
@@ -100,6 +103,18 @@ namespace DuiLib
 		return _T("PlayerWnd");
 	}
 
+	LRESULT CPlayerWnd::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
+	{
+		if( uMsg == WM_LBUTTONDOWN ) {
+			FFplayPause();
+			return 0;
+		}
+
+		LRESULT lRes = 0;
+		if( m_Manager.MessageHandler(uMsg, wParam, lParam, lRes) ) return lRes;
+		return CWindowWnd::HandleMessage(uMsg, wParam, lParam);
+	}
+
 	void CPlayerWnd::OnFinalMessage(HWND hWnd)
 	{
 		FFplayExit();
@@ -119,17 +134,25 @@ namespace DuiLib
 		return true;
 	}
 
-	bool CPlayerWnd::Play()
+	void CPlayerWnd::Play()
 	{
 		FFplayPlay();
-		return true;
 	}
 
-	bool CPlayerWnd::Stop()
+	void CPlayerWnd::Pause()
+	{
+		FFplayPause();
+	}
+
+	void CPlayerWnd::Stop()
+	{
+		FFplayStop();
+	}
+
+	void CPlayerWnd::Exit()
 	{
 		FFplayExit();
 		::SendMessage(m_hWnd, WM_CLOSE, 0, 0);
-		return true;
 	}
 
 
@@ -218,22 +241,33 @@ namespace DuiLib
 		return false;
 	}
 
-	bool CPlayerUI::Play()
+	void CPlayerUI::Play()
+	{
+		if(m_pWindow){
+			SetVisible(true);
+			m_pWindow->Play();
+		}
+	}
+
+	void CPlayerUI::Pause()
+	{
+		if(m_pWindow){
+			m_pWindow->Pause();
+		}
+	}
+
+	void CPlayerUI::Stop()
+	{
+		if(m_pWindow){
+			m_pWindow->Stop();
+		}
+	}
+
+	void CPlayerUI::Exit()
 	{
 		Activate();
 		if(m_pWindow){
-			SetVisible(true);
-			return m_pWindow->Play();
+			m_pWindow->Exit();
 		}
-		return false;
-	}
-
-	bool CPlayerUI::Stop()
-	{
-		if(m_pWindow){
-			SetVisible(false);
-			return m_pWindow->Stop();
-		}
-		return false;
 	}
 }
