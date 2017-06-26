@@ -10,15 +10,15 @@ public:
 	~CMainDlg();
 
 public:
-	virtual CDuiString GetSkinFile() {return _T("MainDlg.xml");};
-	virtual LPCTSTR GetWindowClassName() const {return _T("CMainDlg");};
-	virtual void InitWindow();
-	virtual void OnFinalMessage(HWND hWnd);
-	//virtual CControlUI* CreateControl(LPCTSTR pstrClass);
+	CDuiString GetSkinFile() {return _T("MainDlg.xml");};
+	LPCTSTR GetWindowClassName() const {return _T("CMainDlg");};
+	void InitWindow();
+	LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	void OnFinalMessage(HWND hWnd);
 
 protected:
 	DUI_DECLARE_MESSAGE_MAP()
-		void Notify(TNotifyUI& msg);
+	void Notify(TNotifyUI& msg);
 
 private:
 	CLabelUI*		labTitle;

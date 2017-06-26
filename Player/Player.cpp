@@ -2,14 +2,11 @@
 #include "Player.h"
 #include "FFplay.h"
 
-HMODULE gModule = NULL;
-
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 {
 	switch (dwReason)
 	{
 	case DLL_PROCESS_ATTACH:
-		gModule = hModule;
 		break;
 	case DLL_THREAD_ATTACH:
 		break;
@@ -23,7 +20,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 
 extern "C" PLAYER_API DuiLib::CControlUI* CreateControl(LPCTSTR pstrClass)
 {
-	if (_tcsicmp(pstrClass, _T("Player")) == 0 && gModule!=NULL)
+	if (_tcsicmp(pstrClass, _T("Player")) == 0)
 	{
 		return new DuiLib::CPlayerUI();
 	}
@@ -44,7 +41,6 @@ namespace DuiLib
 
 		void Init(CPlayerUI* pOwner);
 		LRESULT Play(LPCSTR filepath);
-		RECT CalPos();
 
 		LPCTSTR GetWindowClassName() const;
 		LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -54,7 +50,6 @@ namespace DuiLib
 		void Play();
 		void Pause();
 		void Stop();
-		void Exit();
 
 	protected:
 		CPaintManagerUI m_Manager;
@@ -72,30 +67,10 @@ namespace DuiLib
 	void CPlayerWnd::Init(CPlayerUI* pOwner)
 	{
 		m_pOwner = pOwner;
-		RECT rcPos = CalPos();
-		UINT uStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+		RECT rcPos = {0,0,0,0};
+		UINT uStyle = WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 		Create(m_pOwner->GetManager()->GetPaintWindow(),_T("UIPlayer"),uStyle,0,rcPos);
-		::ShowWindow(m_hWnd, pOwner->IsVisible() ? SW_SHOW : SW_HIDE);
-	}
-
-	RECT CPlayerWnd::CalPos()
-	{
-		CDuiRect rcPos = m_pOwner->GetPos();
-		CControlUI* pParent = m_pOwner;
-		RECT rcParent;
-		while( pParent = pParent->GetParent() ) {
-			if( !pParent->IsVisible() ) {
-				rcPos.left = rcPos.top = rcPos.right = rcPos.bottom = 0;
-				break;
-			}
-			rcParent = pParent->GetClientPos();
-			if( !::IntersectRect(&rcPos, &rcPos, &rcParent) ) {
-				rcPos.left = rcPos.top = rcPos.right = rcPos.bottom = 0;
-				break;
-			}
-		}
-
-		return rcPos;
+		FFplayInit();
 	}
 
 	LPCTSTR CPlayerWnd::GetWindowClassName() const
@@ -126,17 +101,14 @@ namespace DuiLib
 
 	bool CPlayerWnd::Open(LPCSTR filepath)
 	{
-		if(gModule)
-			FFplayInit(gModule,m_hWnd,CalPos());
-		else
-			return false;
 		FFplayOpen(filepath);
 		return true;
 	}
 
 	void CPlayerWnd::Play()
 	{
-		FFplayPlay();
+		::ShowWindow(m_hWnd, SW_SHOW);
+		FFplayPlay(m_hWnd,m_pOwner->GetRelativePos());
 	}
 
 	void CPlayerWnd::Pause()
@@ -149,13 +121,6 @@ namespace DuiLib
 		FFplayStop();
 	}
 
-	void CPlayerWnd::Exit()
-	{
-		FFplayExit();
-		::SendMessage(m_hWnd, WM_CLOSE, 0, 0);
-	}
-
-
 	/////////////////////////////////////////////////////////////////////////////////////
 	//
 
@@ -165,7 +130,7 @@ namespace DuiLib
 
 	CPlayerUI::~CPlayerUI()
 	{
-		if( m_pWindow != NULL ) {
+		if(m_pWindow){
 			::DestroyWindow(*m_pWindow);
 			delete m_pWindow;
 			m_pWindow =	NULL;
@@ -183,38 +148,6 @@ namespace DuiLib
 		return CControlUI::GetInterface(pstrName);
 	}
 
-	HWND CPlayerUI::GetNativeWindow() const
-	{
-		if (m_pWindow) return m_pWindow->GetHWND();
-		return NULL;
-	}
-
-	bool CPlayerUI::Activate()
-	{
-		if( !IsVisible() ) return false;
-		if( !IsEnabled() ) return false;
-
-		if(m_pWindow == NULL){
-			m_pWindow = new CPlayerWnd();
-			m_pWindow->Init(this);
-		}
-		return true;
-	}
-
-	void CPlayerUI::DoEvent(TEventUI& event)
-	{
-		CControlUI::DoEvent(event);
-	}
-
-	void CPlayerUI::SetPos(RECT rc, bool bNeedInvalidate)
-	{
-		CControlUI::SetPos(rc, bNeedInvalidate);
-		if( m_pWindow != NULL ) {
-			::SetWindowPos(m_pWindow->GetHWND(), NULL, rc.left, rc.top, rc.right - rc.left,
-				rc.bottom - rc.top, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOACTIVATE);
-		}
-	}
-
 	void CPlayerUI::SetVisible(bool bVisible)
 	{
 		if( m_bVisible == bVisible ) return;
@@ -223,17 +156,30 @@ namespace DuiLib
 			::ShowWindow(*m_pWindow, IsVisible() ? SW_SHOW : SW_HIDE);
 	}
 
-	void CPlayerUI::SetInternVisible(bool bVisible)
+	void CPlayerUI::SetPos(RECT rc, bool bNeedInvalidate)
 	{
-		if( m_bVisible == bVisible ) return;
-		CControlUI::SetInternVisible(bVisible);
-		if( IsVisible() && m_pWindow != NULL )
-			::ShowWindow(*m_pWindow, IsVisible() ? SW_SHOW : SW_HIDE);
+		CControlUI::SetPos(rc, bNeedInvalidate);
+		if( m_pWindow != NULL ) {
+			::SetWindowPos(m_pWindow->GetHWND(), NULL, rc.left, rc.top, rc.right - rc.left, 
+				rc.bottom - rc.top, SWP_NOZORDER | SWP_NOACTIVATE);
+		}
+	}
+
+	void CPlayerUI::DoInit()
+	{
+		if(m_pWindow == NULL)
+			m_pWindow = new CPlayerWnd();
+		if(m_pWindow != NULL)
+			m_pWindow->Init(this);
+	}
+
+	void CPlayerUI::DoEvent(TEventUI& event)
+	{
+		CControlUI::DoEvent(event);
 	}
 
 	bool CPlayerUI::Open(LPCSTR filepath)
 	{
-		Activate();
 		if(m_pWindow){
 			return m_pWindow->Open(filepath);
 		}
@@ -244,7 +190,6 @@ namespace DuiLib
 	void CPlayerUI::Play()
 	{
 		if(m_pWindow){
-			SetVisible(true);
 			m_pWindow->Play();
 		}
 	}
@@ -260,14 +205,6 @@ namespace DuiLib
 	{
 		if(m_pWindow){
 			m_pWindow->Stop();
-		}
-	}
-
-	void CPlayerUI::Exit()
-	{
-		Activate();
-		if(m_pWindow){
-			m_pWindow->Exit();
 		}
 	}
 }

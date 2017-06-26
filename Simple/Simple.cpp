@@ -68,20 +68,30 @@ void CMainDlg::InitWindow()
 	labTitle->SetText(sTitle.GetData());
 }
 
+LRESULT CMainDlg::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	switch (uMsg) {
+	case WM_KEYDOWN:
+		switch (wParam)
+		{
+		case VK_SPACE:
+			pPlayerUI->Pause();
+			return 0;
+		default:
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+	return WindowImplBase::HandleMessage(uMsg, wParam, lParam);
+}
+
 void CMainDlg::OnFinalMessage(HWND hWnd)
 {
 	WindowImplBase::OnFinalMessage(hWnd);
 	delete this;
 }
-
-//CControlUI* CMainDlg::CreateControl(LPCTSTR pstrClass)
-//{
-//	if (_tcsicmp(pstrClass, _T("Player")) == 0)
-//	{
-//		return new CPlayerUI();
-//	}
-//	return NULL;
-//}
 
 void CMainDlg::Notify(TNotifyUI& msg)
 {
@@ -102,8 +112,12 @@ void CMainDlg::Notify(TNotifyUI& msg)
 				{
 					lpAscii = new char[iLength];
 					iLength = WideCharToMultiByte(CP_ACP, 0, sFilename.GetData(), -1, lpAscii, iLength, 0, 0);
-					pPlayerUI->Open(lpAscii);
-					pPlayerUI->Play();
+					for(int i=0;i<2;i++)
+					{
+						pPlayerUI->Open(lpAscii);
+						pPlayerUI->Play();
+						Sleep(3000);
+					}
 					delete[] lpAscii;
 				}
 			}

@@ -1305,7 +1305,9 @@ static int video_open(VideoState *is)
 
 	if (!window || !renderer) {
 		av_log(NULL, AV_LOG_FATAL, "SDL: could not set video mode - exiting\n");
-		return do_exit(is);
+		//return do_exit(is);
+		stream_close(is);
+		return 0;
 	}
 
 	is->width  = w;
@@ -2576,7 +2578,6 @@ fail:
 
 	if (ret != 0) {
 		SDL_Event event;
-
 		event.type = FF_QUIT_EVENT;
 		event.user.data1 = is;
 		SDL_PushEvent(&event);
@@ -2742,8 +2743,10 @@ static void event_loop(VideoState *cur_stream)
 			}
 			break;
 		case SDL_QUIT:
-		case FF_QUIT_EVENT:
 			do_exit(cur_stream);
+			return;
+		case FF_QUIT_EVENT:
+			stream_close(cur_stream);
 			return;
 		default:
 			break;
@@ -2772,21 +2775,13 @@ static int lockmgr(void **mtx, enum AVLockOp op)
 	return 1;
 }
 
-extern "C" FFPLAY_API int ffplay_init(HWND hWnd,RECT rcPos)
+extern "C" FFPLAY_API int ffplay_init()
 {
 	av_log_set_flags(AV_LOG_SKIP_REPEATED);
 
 	/* register all codecs, demux and protocols */
 	av_register_all();
 	avformat_network_init();
-
-	is = (VideoState *)av_mallocz(sizeof(VideoState));
-	if (!is) {
-		if(hWnd != NULL)
-			SendMessage(is->hFromWnd,WM_CLOSE,0,0);
-		avformat_network_deinit();
-		return 0;
-	}
 
 	if (av_lockmgr_register(lockmgr)) {
 		av_log(NULL, AV_LOG_FATAL, "Could not initialize lock manager!\n");
@@ -2796,21 +2791,26 @@ extern "C" FFPLAY_API int ffplay_init(HWND hWnd,RECT rcPos)
 	av_init_packet(&flush_pkt);
 	flush_pkt.data = (uint8_t *)&flush_pkt;
 
-	is->hFromWnd = hWnd;
-	screen_width  = is->width   = rcPos.right - rcPos.left;
-	screen_height  = is->height  = rcPos.bottom - rcPos.top;
-
 	if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
 		av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
 		return 1;
 	}
 
+	return 0;
+}
+
+extern "C" FFPLAY_API int ffplay_open(const char *filename)
+{
+
+	is = (VideoState *)av_mallocz(sizeof(VideoState));
+	if (!is) {
+		avformat_network_deinit();
+		return 0;
+	}
+	is->iformat = file_iformat;
+
 	SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
 	SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
-
-	is->iformat = file_iformat;
-	is->ytop    = 0;
-	is->xleft   = 0;
 
 	/* start video display */
 	do
@@ -2840,31 +2840,27 @@ extern "C" FFPLAY_API int ffplay_init(HWND hWnd,RECT rcPos)
 		is->audio_volume = startup_volume;
 		is->muted = 0;
 		is->av_sync_type = av_sync_type;
-		return 0;
-
+		if (filename) {
+			is->filename = av_strdup(filename);
+			if (is->filename){
+				return 0;
+			}
+		}else{
+			av_log(NULL, AV_LOG_FATAL, "An filename must be specified\n");
+		}
 	}while(0);
 	stream_close(is);
-	return 0;
+	return -1;
 }
 
-extern "C" FFPLAY_API int ffplay_open(const char *filename)
-{
-	if (filename) {
-		is->filename = av_strdup(filename);
-		if (is->filename){
-			return 0;
-		}
-		stream_close(is);
-	}else{
-		av_log(NULL, AV_LOG_FATAL, "An filename must be specified\n");
-		return -1;
-	}
-	return -2;
-}
-
-extern "C" FFPLAY_API int ffplay_play()
+extern "C" FFPLAY_API int ffplay_play(HWND hWnd,RECT rcPos)
 {
 	if (is && is->filename){
+		is->hFromWnd = hWnd;
+		screen_width  = is->width   = rcPos.right - rcPos.left;
+		screen_height  = is->height  = rcPos.bottom - rcPos.top;
+		is->ytop    = rcPos.top;
+		is->xleft   = rcPos.left;
 		is->read_tid = SDL_CreateThread(read_thread, "read_thread", is);
 		if (is->read_tid) {
 			event_loop(is);
