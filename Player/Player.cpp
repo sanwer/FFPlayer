@@ -29,10 +29,6 @@ extern "C" PLAYER_API DuiLib::CControlUI* CreateControl(LPCTSTR pstrClass)
 	return	NULL;
 }
 
-void PlayerCallback(const char * filename)
-{
-}
-
 namespace DuiLib
 {
 	class CPlayerWnd : public CWindowWnd
@@ -114,7 +110,11 @@ namespace DuiLib
 	{
 		if(bOpen){
 			::ShowWindow(m_hWnd, SW_SHOW);
-			FFplayPlay(m_hWnd,m_pOwner->GetRelativePos());
+			RECT rcPlay,rcPos = m_pOwner->GetPos();
+			rcPlay.top = rcPlay.left = 0;
+			rcPlay.right = rcPos.right - rcPos.left;
+			rcPlay.bottom = rcPos.bottom - rcPos.top;
+			FFplayPlay(m_hWnd,rcPlay);
 		}
 	}
 
@@ -170,7 +170,7 @@ namespace DuiLib
 	void CPlayerUI::SetPos(RECT rc, bool bNeedInvalidate)
 	{
 		CControlUI::SetPos(rc, bNeedInvalidate);
-		if( m_pWindow != NULL ) {
+		if( m_pWindow) {
 			::SetWindowPos(m_pWindow->GetHWND(), NULL, rc.left, rc.top, rc.right - rc.left, 
 				rc.bottom - rc.top, SWP_NOZORDER | SWP_NOACTIVATE);
 		}

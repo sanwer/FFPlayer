@@ -358,7 +358,7 @@ AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
 			switch (avformat_match_stream_specifier(s, st, p + 1)) {
 			case  1: *p = 0; break;
 			case  0: continue;
-			default: ffplay_exit();
+			default: ffplay_stop();
 		}
 
 		if (av_opt_find(&cc, t->key, NULL, flags, AV_OPT_SEARCH_FAKE_OBJ) ||
@@ -2886,4 +2886,55 @@ extern "C" FFPLAY_API bool ffplay_stop()
 extern "C" FFPLAY_API void ffplay_exit()
 {
 	do_exit(is);
+}
+
+CFFplay::CFFplay() : m_pCallback(NULL),pData(NULL)
+{
+}
+
+CFFplay::~CFFplay()
+{
+	if(pData){
+		delete pData;
+		pData = NULL;
+	}
+}
+
+void CFFplay::Init()
+{
+}
+
+bool CFFplay::Stop()
+{
+	return false;
+}
+
+void CFFplay::Exit()
+{
+}
+
+bool CFFplay::Open(const char *filename)
+{
+	return false;
+}
+
+void CFFplay::Play(HWND hWnd,RECT rcPos)
+{
+}
+
+void CFFplay::Pause()
+{
+}
+
+extern "C" FFPLAY_API IPlayer* FFplayInit()
+{
+	return new CFFplay();
+}
+
+extern "C" FFPLAY_API bool FFplayExit(IPlayer* pPlayer)
+{
+	if(pPlayer){
+		pPlayer->Exit();
+	}
+	return false;
 }
