@@ -33,6 +33,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 	pMainDlg->CenterWindow();
 	UINT iRet = pMainDlg->ShowModal();
 
+	//释放UI界面资源
+	CPaintManagerUI::Term();
 	//反初始化COM
 	::CoUninitialize();
 
@@ -98,28 +100,25 @@ void CMainDlg::Notify(TNotifyUI& msg)
 	if (_tcsicmp(msg.sType,DUI_MSGTYPE_WINDOWINIT) == 0)
 	{
 		if(pPlayerUI != NULL){
-			CDuiString sBuffer,sFilename = _T("cuc_ieschool.flv");
-			if(sFilename.Find(_T(':'))==-1){
-				CDuiString sPath = CPaintManagerUI::GetInstancePath();
-				sBuffer = sPath + sFilename;
-				sFilename = sBuffer;
+			char szFilepath[MAX_PATH] = {0};
+			char szFilename[MAX_PATH] = {0};
+			char szDrive[MAX_PATH] = {0};
+			char szDir[MAX_PATH] = {0};
+			sprintf(szFilename,"cuc_ieschool.flv");
+			if(strchr(szFilename,':') >= 0){
+				::GetModuleFileNameA(CPaintManagerUI::GetInstance(), szFilepath, MAX_PATH);
+				_splitpath(szFilepath,szDrive,szDir,NULL,NULL);
+				sprintf(szFilepath,"%s%s%s",szDrive,szDir,szFilename);
+			}else{
+				strcpy(szFilepath,szFilename);
 			}
-			if(PathFileExists(sFilename.GetData())){
-				LPSTR lpAscii = NULL;
-				int iLength;
-				iLength = WideCharToMultiByte(CP_ACP, 0, sFilename.GetData(), -1, 0, 0, 0, 0);
-				if(iLength > 1)
+			if(PathFileExistsA(szFilepath)){
+				for(int i=0;i<20;i++)
 				{
-					lpAscii = new char[iLength];
-					iLength = WideCharToMultiByte(CP_ACP, 0, sFilename.GetData(), -1, lpAscii, iLength, 0, 0);
-					for(int i=0;i<2;i++)
-					{
-						pPlayerUI->Open(lpAscii);
-						pPlayerUI->Play();
-						Sleep(3000);
-					}
-					delete[] lpAscii;
+					pPlayerUI->Open(szFilepath);
+					pPlayerUI->Play();
 				}
+				Close();
 			}
 		}
 	}

@@ -7,12 +7,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 	switch (dwReason)
 	{
 	case DLL_PROCESS_ATTACH:
+		FFplayInitDLL();
 		break;
 	case DLL_THREAD_ATTACH:
 		break;
 	case DLL_THREAD_DETACH:
 		break;
 	case DLL_PROCESS_DETACH:
+		FFplayExitDLL();
 		break;
 	}
 	return TRUE;
@@ -54,9 +56,12 @@ namespace DuiLib
 	protected:
 		CPaintManagerUI m_Manager;
 		CPlayerUI* m_pOwner;
+		bool bOpen;
+		bool bPlay;
+		bool bPause;
 	};
 
-	CPlayerWnd::CPlayerWnd() : m_pOwner(NULL)
+	CPlayerWnd::CPlayerWnd() : m_pOwner(NULL),bOpen(false),bPlay(false),bPause(false)
 	{
 	}
 
@@ -92,6 +97,7 @@ namespace DuiLib
 
 	void CPlayerWnd::OnFinalMessage(HWND hWnd)
 	{
+		FFplayStop();
 		FFplayExit();
 		m_pOwner->Invalidate();
 		m_pOwner->m_pWindow = NULL;
@@ -101,24 +107,29 @@ namespace DuiLib
 
 	bool CPlayerWnd::Open(LPCSTR filepath)
 	{
-		FFplayOpen(filepath);
-		return true;
+		return bOpen = FFplayOpen(filepath);
 	}
 
 	void CPlayerWnd::Play()
 	{
-		::ShowWindow(m_hWnd, SW_SHOW);
-		FFplayPlay(m_hWnd,m_pOwner->GetRelativePos());
+		if(bOpen){
+			::ShowWindow(m_hWnd, SW_SHOW);
+			FFplayPlay(m_hWnd,m_pOwner->GetRelativePos());
+		}
 	}
 
 	void CPlayerWnd::Pause()
 	{
-		FFplayPause();
+		if(bOpen){
+			FFplayPause();
+		}
 	}
 
 	void CPlayerWnd::Stop()
 	{
-		FFplayStop();
+		if(bOpen){
+			FFplayStop();
+		}
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////

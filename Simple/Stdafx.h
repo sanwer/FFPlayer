@@ -24,6 +24,9 @@
 #include <time.h>
 #include <tchar.h>
 
+#include <vld.h>
+#pragma comment( lib, "vld.lib" )
+
 #include "resource.h"
 
 #include "..\..\DuiLib\UIlib.h"

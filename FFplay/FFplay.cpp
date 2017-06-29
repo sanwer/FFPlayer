@@ -2775,7 +2775,7 @@ static int lockmgr(void **mtx, enum AVLockOp op)
 	return 1;
 }
 
-extern "C" FFPLAY_API int ffplay_init()
+extern "C" FFPLAY_API bool ffplay_init()
 {
 	av_log_set_flags(AV_LOG_SKIP_REPEATED);
 
@@ -2785,7 +2785,8 @@ extern "C" FFPLAY_API int ffplay_init()
 
 	if (av_lockmgr_register(lockmgr)) {
 		av_log(NULL, AV_LOG_FATAL, "Could not initialize lock manager!\n");
-		return do_exit(NULL);
+		do_exit(NULL);
+		return false;
 	}
 
 	av_init_packet(&flush_pkt);
@@ -2793,19 +2794,19 @@ extern "C" FFPLAY_API int ffplay_init()
 
 	if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
 		av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
-		return 1;
+		return false;
 	}
 
-	return 0;
+	return true;
 }
 
-extern "C" FFPLAY_API int ffplay_open(const char *filename)
+extern "C" FFPLAY_API bool ffplay_open(const char *filename)
 {
 
 	is = (VideoState *)av_mallocz(sizeof(VideoState));
 	if (!is) {
 		avformat_network_deinit();
-		return 0;
+		return false;
 	}
 	is->iformat = file_iformat;
 
@@ -2843,17 +2844,17 @@ extern "C" FFPLAY_API int ffplay_open(const char *filename)
 		if (filename) {
 			is->filename = av_strdup(filename);
 			if (is->filename){
-				return 0;
+				return true;
 			}
 		}else{
 			av_log(NULL, AV_LOG_FATAL, "An filename must be specified\n");
 		}
 	}while(0);
 	stream_close(is);
-	return -1;
+	return false;
 }
 
-extern "C" FFPLAY_API int ffplay_play(HWND hWnd,RECT rcPos)
+extern "C" FFPLAY_API void ffplay_play(HWND hWnd,RECT rcPos)
 {
 	if (is && is->filename){
 		is->hFromWnd = hWnd;
@@ -2864,27 +2865,25 @@ extern "C" FFPLAY_API int ffplay_play(HWND hWnd,RECT rcPos)
 		is->read_tid = SDL_CreateThread(read_thread, "read_thread", is);
 		if (is->read_tid) {
 			event_loop(is);
-			return 0;
+			return;
 		}
 		av_log(NULL, AV_LOG_FATAL, "SDL_CreateThread(): %s\n", SDL_GetError());
 	}
-	return 0;
 }
 
-extern "C" FFPLAY_API int ffplay_pause()
+extern "C" FFPLAY_API void ffplay_pause()
 {
 	toggle_pause(is);
-	return 0;
 }
 
-extern "C" FFPLAY_API int ffplay_stop()
-{
-	return 0;
-}
-
-extern "C" FFPLAY_API int ffplay_exit()
+extern "C" FFPLAY_API bool ffplay_stop()
 {
 	SDL_Event event;
 	event.type = SDL_QUIT;
-	return SDL_PushEvent(&event);
+	return SDL_PushEvent(&event) == 1;
+}
+
+extern "C" FFPLAY_API void ffplay_exit()
+{
+	do_exit(is);
 }

@@ -2,11 +2,13 @@
 #define _FFPLAY_H_
 #pragma once
 
+void FFplayInitDLL();
+void FFplayExitDLL();
 void FFplayInit();
 void FFplayExit();
-int FFplayOpen(const char *filename);
-int FFplayPlay(HWND hWnd,RECT rcPos);
-int FFplayPause();
-int FFplayStop();
+bool FFplayOpen(const char *filename);
+void FFplayPlay(HWND hWnd,RECT rcPos);
+void FFplayPause();
+bool FFplayStop();
 
 #endif
