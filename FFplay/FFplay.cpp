@@ -321,6 +321,22 @@ VideoState *is;
 AVInputFormat *file_iformat;
 AVDictionary *format_opts, *codec_opts;
 
+
+static void (*program_exit)(int ret);
+
+void register_exit(void (*cb)(int ret))
+{
+    program_exit = cb;
+}
+
+void exit_program(int ret)
+{
+    if (program_exit)
+        program_exit(ret);
+
+    exit(ret);
+}
+
 AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
 	AVFormatContext *s, AVStream *st, AVCodec *codec)
 {
@@ -358,7 +374,7 @@ AVDictionary *filter_codec_opts(AVDictionary *opts, enum AVCodecID codec_id,
 			switch (avformat_match_stream_specifier(s, st, p + 1)) {
 			case  1: *p = 0; break;
 			case  0: continue;
-			default: ffplay_stop();
+			default: exit_program(1);
 		}
 
 		if (av_opt_find(&cc, t->key, NULL, flags, AV_OPT_SEARCH_FAKE_OBJ) ||
@@ -2802,7 +2818,6 @@ extern "C" FFPLAY_API bool ffplay_init()
 
 extern "C" FFPLAY_API bool ffplay_open(const char *filename)
 {
-
 	is = (VideoState *)av_mallocz(sizeof(VideoState));
 	if (!is) {
 		avformat_network_deinit();
@@ -2883,55 +2898,162 @@ extern "C" FFPLAY_API bool ffplay_stop()
 	return SDL_PushEvent(&event) == 1;
 }
 
-extern "C" FFPLAY_API void ffplay_exit()
+class FFPLAY_API CFFplay : public IPlayer
 {
-	do_exit(is);
-}
+public:
+	CFFplay();
+	virtual ~CFFplay();
 
-CFFplay::CFFplay() : m_pCallback(NULL),pData(NULL)
+	bool Init();
+	bool Stop();
+	void Exit();
+	bool Open(const char *filename);
+	void Play(HWND hWnd,RECT rcPos);
+	void Pause();
+
+private:
+	IPlayerCallback* m_pCallback;
+	VideoState* m_pState;
+};
+
+CFFplay::CFFplay() : m_pCallback(NULL),m_pState(NULL)
 {
 }
 
 CFFplay::~CFFplay()
 {
-	if(pData){
-		delete pData;
-		pData = NULL;
+	if (m_pState) {
+		if(m_pState->hFromWnd != NULL)
+			SendMessage(m_pState->hFromWnd,WM_CLOSE,0,0);
+		stream_close(m_pState);
 	}
+	if (renderer)
+		SDL_DestroyRenderer(renderer);
+	if (window){
+		SDL_DestroyWindow(window);
+	}
+	av_lockmgr_register(NULL);
+	av_dict_free(&format_opts);
+	av_dict_free(&codec_opts);
+	avformat_network_deinit();
+	SDL_Quit();
+	av_log(NULL, AV_LOG_QUIET, "%s", "");
 }
 
-void CFFplay::Init()
+bool CFFplay::Init()
 {
+	av_log_set_flags(AV_LOG_SKIP_REPEATED);
+
+	/* register all codecs, demux and protocols */
+	av_register_all();
+	avformat_network_init();
+
+	if (av_lockmgr_register(lockmgr)) {
+		av_log(NULL, AV_LOG_FATAL, "Could not initialize lock manager!\n");
+		do_exit(NULL);
+		return false;
+	}
+
+	av_init_packet(&flush_pkt);
+	flush_pkt.data = (uint8_t *)&flush_pkt;
+
+	if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
+		av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
+		return false;
+	}
+
+	return true;
 }
 
 bool CFFplay::Stop()
 {
+	SDL_Event event;
+	event.type = SDL_QUIT;
+	return SDL_PushEvent(&event) == 1;
 	return false;
 }
 
 void CFFplay::Exit()
 {
+	//do_exit(is);
 }
 
 bool CFFplay::Open(const char *filename)
 {
-	return false;
+	if (!filename) {
+		av_log(NULL, AV_LOG_FATAL, "An filename must be specified\n");
+		return false;
+	}
+
+	m_pState = (VideoState *)av_mallocz(sizeof(VideoState));
+	if (!m_pState) {
+		return false;
+	}
+	m_pState->iformat = file_iformat;
+
+	SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
+	SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
+
+	/* start video display */
+	if (frame_queue_init(&m_pState->pictq, &m_pState->videoq, VIDEO_PICTURE_QUEUE_SIZE, 1) < 0)
+		return false;
+	if (frame_queue_init(&m_pState->subpq, &m_pState->subtitleq, SUBPICTURE_QUEUE_SIZE, 0) < 0)
+		return false;
+	if (frame_queue_init(&m_pState->sampq, &m_pState->audioq, SAMPLE_QUEUE_SIZE, 1) < 0)
+		return false;
+	if (packet_queue_init(&m_pState->videoq) < 0 ||
+		packet_queue_init(&m_pState->audioq) < 0 ||
+		packet_queue_init(&m_pState->subtitleq) < 0)
+		return false;
+
+	if (!(m_pState->continue_read_thread = SDL_CreateCond())) {
+		av_log(NULL, AV_LOG_FATAL, "SDL_CreateCond(): %s\n", SDL_GetError());
+		return false;
+	}
+
+	init_clock(&m_pState->vidclk, &m_pState->videoq.serial);
+	init_clock(&m_pState->audclk, &m_pState->audioq.serial);
+	init_clock(&m_pState->extclk, &m_pState->extclk.serial);
+	m_pState->audio_clock_serial = -1;
+	startup_volume = av_clip(startup_volume, 0, 100);
+	startup_volume = av_clip(SDL_MIX_MAXVOLUME * startup_volume / 100, 0, SDL_MIX_MAXVOLUME);
+	m_pState->audio_volume = startup_volume;
+	m_pState->muted = 0;
+	m_pState->av_sync_type = av_sync_type;
+	m_pState->filename = av_strdup(filename);
+	if (!m_pState->filename)
+		return false;
+	return true;
 }
 
 void CFFplay::Play(HWND hWnd,RECT rcPos)
 {
+	if (m_pState && m_pState->filename){
+		m_pState->hFromWnd = hWnd;
+		screen_width  = m_pState->width   = rcPos.right - rcPos.left;
+		screen_height  = m_pState->height  = rcPos.bottom - rcPos.top;
+		m_pState->ytop    = rcPos.top;
+		m_pState->xleft   = rcPos.left;
+		m_pState->read_tid = SDL_CreateThread(read_thread, "read_thread", m_pState);
+		if (m_pState->read_tid) {
+			event_loop(m_pState);
+			return;
+		}
+		av_log(NULL, AV_LOG_FATAL, "SDL_CreateThread(): %s\n", SDL_GetError());
+	}
 }
 
 void CFFplay::Pause()
 {
+	toggle_pause(m_pState);
 }
 
-extern "C" FFPLAY_API IPlayer* FFplayInit()
+extern "C" FFPLAY_API IPlayer* PlayerInit()
 {
 	return new CFFplay();
 }
 
-extern "C" FFPLAY_API bool FFplayExit(IPlayer* pPlayer)
+extern "C" FFPLAY_API bool PlayerExit(IPlayer* pPlayer)
 {
 	if(pPlayer){
 		pPlayer->Exit();
