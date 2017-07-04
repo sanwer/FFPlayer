@@ -122,7 +122,6 @@ namespace DuiLib
 			if(m_pPlayer)
 				 m_pPlayer->Init();
 		}
-
 	}
 
 	LPCTSTR CPlayerWnd::GetWindowClassName() const

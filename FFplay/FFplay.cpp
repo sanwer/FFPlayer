@@ -317,9 +317,40 @@ static HWND hFromWnd=NULL;
 #define isnan _isnan
 #define lrint(f) (f>=0?(int32_t)(f+(double)0.5):(int32_t)(f-(double)0.4))
 
-VideoState *is;
 AVInputFormat *file_iformat;
 AVDictionary *format_opts, *codec_opts;
+
+
+class FFPLAY_API CFFplay : public IPlayer
+{
+public:
+	CFFplay();
+	virtual ~CFFplay();
+
+	bool Init();
+	bool Stop();
+	void Exit();
+	bool Open(const char *filename);
+	void Play(HWND hWnd,RECT rcPos);
+	void Pause();
+
+private:
+	IPlayerCallback* m_pCallback;
+	VideoState* m_pState;
+};
+
+extern "C" FFPLAY_API IPlayer* PlayerInit()
+{
+	return new CFFplay();
+}
+
+extern "C" FFPLAY_API bool PlayerExit(IPlayer* pPlayer)
+{
+	if(pPlayer){
+		pPlayer->Exit();
+	}
+	return false;
+}
 
 
 static void (*program_exit)(int ret);
@@ -412,26 +443,6 @@ AVDictionary **setup_find_stream_info_opts(AVFormatContext *s,
 		opts[i] = filter_codec_opts(codec_opts, s->streams[i]->codecpar->codec_id,
 		s, s->streams[i], NULL);
 	return opts;
-}
-
-static inline
-	int cmp_audio_fmts(enum AVSampleFormat fmt1, int64_t channel_count1,
-	enum AVSampleFormat fmt2, int64_t channel_count2)
-{
-	/* If channel count == 1, planar and non-planar formats are the same */
-	if (channel_count1 == 1 && channel_count2 == 1)
-	return av_get_packed_sample_fmt(fmt1) != av_get_packed_sample_fmt(fmt2);
-	else
-		return channel_count1 != channel_count2 || fmt1 != fmt2;
-}
-
-static inline
-	int64_t get_valid_channel_layout(int64_t channel_layout, int channels)
-{
-	if (channel_layout && av_get_channel_layout_nb_channels(channel_layout) == channels)
-		return channel_layout;
-	else
-		return 0;
 }
 
 static int packet_queue_put_private(PacketQueue *q, AVPacket *pkt)
@@ -806,16 +817,6 @@ static void frame_queue_next(FrameQueue *f)
 static int frame_queue_nb_remaining(FrameQueue *f)
 {
 	return f->size - f->rindex_shown;
-}
-
-/* return last shown position */
-static int64_t frame_queue_last_pos(FrameQueue *f)
-{
-	Frame *fp = &f->queue[f->rindex];
-	if (f->rindex_shown && fp->serial == f->pktq->serial)
-		return fp->pos;
-	else
-		return -1;
 }
 
 static void decoder_abort(Decoder *d, FrameQueue *fq)
@@ -2602,134 +2603,22 @@ fail:
 	return 0;
 }
 
-static void stream_cycle_channel(VideoState *is, int codec_type)
-{
-	AVFormatContext *ic = is->ic;
-	int start_index, stream_index;
-	int old_index;
-	AVStream *st;
-	AVProgram *p = NULL;
-	int nb_streams = is->ic->nb_streams;
-
-	if (codec_type == AVMEDIA_TYPE_VIDEO) {
-		start_index = is->last_video_stream;
-		old_index = is->video_stream;
-	} else if (codec_type == AVMEDIA_TYPE_AUDIO) {
-		start_index = is->last_audio_stream;
-		old_index = is->audio_stream;
-	} else {
-		start_index = is->last_subtitle_stream;
-		old_index = is->subtitle_stream;
-	}
-	stream_index = start_index;
-
-	if (codec_type != AVMEDIA_TYPE_VIDEO && is->video_stream != -1) {
-		p = av_find_program_from_stream(ic, NULL, is->video_stream);
-		if (p) {
-			nb_streams = p->nb_stream_indexes;
-			for (start_index = 0; start_index < nb_streams; start_index++)
-				if (p->stream_index[start_index] == stream_index)
-					break;
-			if (start_index == nb_streams)
-				start_index = -1;
-			stream_index = start_index;
-		}
-	}
-
-	for (;;) {
-		if (++stream_index >= nb_streams)
-		{
-			if (codec_type == AVMEDIA_TYPE_SUBTITLE)
-			{
-				stream_index = -1;
-				is->last_subtitle_stream = -1;
-				goto the_end;
-			}
-			if (start_index == -1)
-				return;
-			stream_index = 0;
-		}
-		if (stream_index == start_index)
-			return;
-		st = is->ic->streams[p ? p->stream_index[stream_index] : stream_index];
-		if (st->codecpar->codec_type == codec_type) {
-			/* check that parameters are OK */
-			switch (codec_type) {
-			case AVMEDIA_TYPE_AUDIO:
-				if (st->codecpar->sample_rate != 0 &&
-					st->codecpar->channels != 0)
-					goto the_end;
-				break;
-			case AVMEDIA_TYPE_VIDEO:
-			case AVMEDIA_TYPE_SUBTITLE:
-				goto the_end;
-			default:
-				break;
-			}
-		}
-	}
-the_end:
-	if (p && stream_index != -1)
-		stream_index = p->stream_index[stream_index];
-	av_log(NULL, AV_LOG_INFO, "Switch %s stream from #%d to #%d\n",
-		av_get_media_type_string((AVMediaType)codec_type),
-		old_index,
-		stream_index);
-
-	stream_component_close(is, old_index);
-	stream_component_open(is, stream_index);
-}
-
-static void refresh_loop_wait_event(VideoState *is, SDL_Event *event) {
-	double remaining_time = 0.0;
-	SDL_PumpEvents();
-	while (!SDL_PeepEvents(event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
-		if (remaining_time > 0.0)
-			av_usleep((int64_t)(remaining_time * 1000000.0));
-		remaining_time = REFRESH_RATE;
-		if (is->show_mode != SHOW_MODE_NONE && (!is->paused || is->force_refresh))
-			video_refresh(is, &remaining_time);
-		SDL_PumpEvents();
-	}
-}
-
-static void seek_chapter(VideoState *is, int incr)
-{
-	int64_t pos = get_master_clock(is) * AV_TIME_BASE;
-	AVRational av_time_base;
-	int i;
-	av_time_base.num = 1;
-	av_time_base.den = AV_TIME_BASE;
-
-	if (!is->ic->nb_chapters)
-		return;
-
-	/* find the current chapter */
-	for (i = 0; i < is->ic->nb_chapters; i++) {
-		AVChapter *ch = is->ic->chapters[i];
-		if (av_compare_ts(pos, av_time_base, ch->start, ch->time_base) < 0) {
-			i--;
-			break;
-		}
-	}
-
-	i += incr;
-	i = FFMAX(i, 0);
-	if (i >= is->ic->nb_chapters)
-		return;
-
-	av_log(NULL, AV_LOG_VERBOSE, "Seeking to chapter %d.\n", i);
-	stream_seek(is, av_rescale_q(is->ic->chapters[i]->start, is->ic->chapters[i]->time_base,
-		av_time_base), 0, 0);
-}
-
 /* handle an event sent by the GUI */
 static void event_loop(VideoState *cur_stream)
 {
 	SDL_Event event;
 
 	while (1) {
-		refresh_loop_wait_event(cur_stream, &event);
+		double remaining_time = 0.0;
+		SDL_PumpEvents();
+		while (!SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
+			if (remaining_time > 0.0)
+				av_usleep((int64_t)(remaining_time * 1000000.0));
+			remaining_time = REFRESH_RATE;
+			if (cur_stream->show_mode != SHOW_MODE_NONE && (!cur_stream->paused || cur_stream->force_refresh))
+				video_refresh(cur_stream, &remaining_time);
+			SDL_PumpEvents();
+		}
 		switch (event.type) {
 		case SDL_KEYDOWN:
 			switch (event.key.keysym.sym) {
@@ -2790,131 +2679,6 @@ static int lockmgr(void **mtx, enum AVLockOp op)
 	}
 	return 1;
 }
-
-extern "C" FFPLAY_API bool ffplay_init()
-{
-	av_log_set_flags(AV_LOG_SKIP_REPEATED);
-
-	/* register all codecs, demux and protocols */
-	av_register_all();
-	avformat_network_init();
-
-	if (av_lockmgr_register(lockmgr)) {
-		av_log(NULL, AV_LOG_FATAL, "Could not initialize lock manager!\n");
-		do_exit(NULL);
-		return false;
-	}
-
-	av_init_packet(&flush_pkt);
-	flush_pkt.data = (uint8_t *)&flush_pkt;
-
-	if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
-		av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
-		return false;
-	}
-
-	return true;
-}
-
-extern "C" FFPLAY_API bool ffplay_open(const char *filename)
-{
-	is = (VideoState *)av_mallocz(sizeof(VideoState));
-	if (!is) {
-		avformat_network_deinit();
-		return false;
-	}
-	is->iformat = file_iformat;
-
-	SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
-	SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
-
-	/* start video display */
-	do
-	{
-		if (frame_queue_init(&is->pictq, &is->videoq, VIDEO_PICTURE_QUEUE_SIZE, 1) < 0)
-			break;
-		if (frame_queue_init(&is->subpq, &is->subtitleq, SUBPICTURE_QUEUE_SIZE, 0) < 0)
-			break;
-		if (frame_queue_init(&is->sampq, &is->audioq, SAMPLE_QUEUE_SIZE, 1) < 0)
-			break;
-		if (packet_queue_init(&is->videoq) < 0 ||
-			packet_queue_init(&is->audioq) < 0 ||
-			packet_queue_init(&is->subtitleq) < 0)
-			break;
-
-		if (!(is->continue_read_thread = SDL_CreateCond())) {
-			av_log(NULL, AV_LOG_FATAL, "SDL_CreateCond(): %s\n", SDL_GetError());
-			break;
-		}
-
-		init_clock(&is->vidclk, &is->videoq.serial);
-		init_clock(&is->audclk, &is->audioq.serial);
-		init_clock(&is->extclk, &is->extclk.serial);
-		is->audio_clock_serial = -1;
-		startup_volume = av_clip(startup_volume, 0, 100);
-		startup_volume = av_clip(SDL_MIX_MAXVOLUME * startup_volume / 100, 0, SDL_MIX_MAXVOLUME);
-		is->audio_volume = startup_volume;
-		is->muted = 0;
-		is->av_sync_type = av_sync_type;
-		if (filename) {
-			is->filename = av_strdup(filename);
-			if (is->filename){
-				return true;
-			}
-		}else{
-			av_log(NULL, AV_LOG_FATAL, "An filename must be specified\n");
-		}
-	}while(0);
-	stream_close(is);
-	return false;
-}
-
-extern "C" FFPLAY_API void ffplay_play(HWND hWnd,RECT rcPos)
-{
-	if (is && is->filename){
-		is->hFromWnd = hWnd;
-		screen_width  = is->width   = rcPos.right - rcPos.left;
-		screen_height  = is->height  = rcPos.bottom - rcPos.top;
-		is->ytop    = rcPos.top;
-		is->xleft   = rcPos.left;
-		is->read_tid = SDL_CreateThread(read_thread, "read_thread", is);
-		if (is->read_tid) {
-			event_loop(is);
-			return;
-		}
-		av_log(NULL, AV_LOG_FATAL, "SDL_CreateThread(): %s\n", SDL_GetError());
-	}
-}
-
-extern "C" FFPLAY_API void ffplay_pause()
-{
-	toggle_pause(is);
-}
-
-extern "C" FFPLAY_API bool ffplay_stop()
-{
-	SDL_Event event;
-	event.type = SDL_QUIT;
-	return SDL_PushEvent(&event) == 1;
-}
-
-class FFPLAY_API CFFplay : public IPlayer
-{
-public:
-	CFFplay();
-	virtual ~CFFplay();
-
-	bool Init();
-	bool Stop();
-	void Exit();
-	bool Open(const char *filename);
-	void Play(HWND hWnd,RECT rcPos);
-	void Pause();
-
-private:
-	IPlayerCallback* m_pCallback;
-	VideoState* m_pState;
-};
 
 CFFplay::CFFplay() : m_pCallback(NULL),m_pState(NULL)
 {
@@ -3046,17 +2810,4 @@ void CFFplay::Play(HWND hWnd,RECT rcPos)
 void CFFplay::Pause()
 {
 	toggle_pause(m_pState);
-}
-
-extern "C" FFPLAY_API IPlayer* PlayerInit()
-{
-	return new CFFplay();
-}
-
-extern "C" FFPLAY_API bool PlayerExit(IPlayer* pPlayer)
-{
-	if(pPlayer){
-		pPlayer->Exit();
-	}
-	return false;
 }

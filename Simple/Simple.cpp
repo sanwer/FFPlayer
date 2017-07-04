@@ -115,8 +115,8 @@ void CMainDlg::Notify(TNotifyUI& msg)
 			if(PathFileExistsA(szFilepath)){
 				for(int i=0;i<20;i++)
 				{
-					pPlayerUI->Open(szFilepath);
-					pPlayerUI->Play();
+					if(pPlayerUI->Open(szFilepath))
+						pPlayerUI->Play();
 				}
 				Close();
 			}
