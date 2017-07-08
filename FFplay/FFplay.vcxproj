@@ -84,6 +84,7 @@
     <ClCompile Include="FFplay.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ffmpeg.h" />
     <ClInclude Include="FFplay.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

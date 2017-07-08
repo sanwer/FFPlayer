@@ -113,12 +113,9 @@ void CMainDlg::Notify(TNotifyUI& msg)
 				strcpy(szFilepath,szFilename);
 			}
 			if(PathFileExistsA(szFilepath)){
-				for(int i=0;i<20;i++)
-				{
-					if(pPlayerUI->Open(szFilepath))
-						pPlayerUI->Play();
-				}
-				Close();
+				if(pPlayerUI->Open(szFilepath))
+					pPlayerUI->Play();
+				//Close();
 			}
 		}
 	}
